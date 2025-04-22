@@ -83,7 +83,7 @@ class TCPServer {
 
         }
 
-        virtual ssize_t send_(std::vector<uint8_t> &buffer) {
+        virtual ssize_t send_(std::vector<int8_t> &buffer) {
             ssize_t bytes = 0;
             bytes = send(sockfd_, buffer.data(), buffer.size(), 0);
             if (bytes < 0) {
