@@ -1,20 +1,115 @@
 #include <bits/stdc++.h>
+#include <sys/syscall.h>
+#include <linux/sched.h>
 #include "../include/tcp_server.h"
 
 #define LOCAL_HOST "192.168.0.60"
 #define LOCAL_PORT 6008
 
-#define numJoints 6
+#define numJoints 6 //Robot has 6 joints
 
-#define ANGLE_THRESHOLD 360
-#define SPEED_THRESHOLD 360
+#define ANGLE_THRESHOLD 360 //Threshold the command angles
+#define SPEED_THRESHOLD 360 //Threshold the speed
 
-#define FREQ 40
+#define FREQ 20 
 
+/*
+Set FIFO Policy with priority for the current Thread
+*/
+void set_realtime_priority(int priority) {
+    struct sched_param param;
+    param.sched_priority = priority;
+
+    if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &param) != 0) {
+        perror("Unable to set realtime priority");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*
+Set CPU Affinity for the current Thread
+*/
+void set_CPU(size_t cpu)
+{
+    cpu_set_t mask;
+    CPU_ZERO(&mask);
+
+    CPU_SET(cpu, &mask);
+
+    // pid = 0 means "calling process"
+    if (sched_setaffinity(0, sizeof(mask), &mask) == -1)
+    {
+        std::cerr << "Error setting CPU affinity: "
+                  << std::strerror(errno) << std::endl;
+    }
+}
+
+/*
+SIGXCPU Handler
+*/
+void sigxcpu_handler(int signum) {
+    std::cerr << "Runtime overrun detected: Task exceeded allocated runtime" << std::endl;
+}
+/*
+Signal Handler for handling runtime overruns
+*/
+void setup_signal_handler() {
+    struct sigaction sa;
+    sa.sa_handler = sigxcpu_handler;
+    sa.sa_flags = 0;
+    sigemptyset(&sa.sa_mask);
+    if (sigaction(SIGXCPU, &sa, NULL) != 0) {
+        perror("Failed to set SIGXCPU handler");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*
+Function for setting Deadline Policy to current Thread
+*/
+struct sched_attr {
+    uint32_t size;
+    uint32_t sched_policy;
+    uint64_t sched_flags;
+    int32_t sched_nice;
+    uint32_t sched_priority;
+    uint64_t sched_runtime;
+    uint64_t sched_deadline;
+    uint64_t sched_period;
+};
+void set_realtime_deadline(unsigned long runtime, unsigned long deadline, unsigned long period)
+{
+    struct sched_attr attr;
+    int ret;
+
+    // Zero out the structure
+    memset(&attr, 0, sizeof(attr));
+
+    // Set the scheduling policy to SCHED_DEADLINE
+    attr.size = sizeof(attr);
+    attr.sched_policy = SCHED_DEADLINE;
+    attr.sched_runtime = runtime;
+    attr.sched_deadline = deadline;
+    attr.sched_period = period;
+
+    // Enable Overrun detection
+    attr.sched_flags |= SCHED_FLAG_DL_OVERRUN;
+
+    // Use syscall to set the scheduling policy and parameters
+    ret = syscall(SYS_sched_setattr, gettid(), &attr, 0);
+    if (ret != 0)
+    {
+        perror("Failed to set SCHED_DEADLINE");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*
+RobotState for unpacking received bytes and copying them to readable joint states
+*/
 struct RobotState {
     float values[numJoints];
 };
-
 RobotState unpack(const std::string& buffer) {
     RobotState state;
 
@@ -25,6 +120,9 @@ RobotState unpack(const std::string& buffer) {
     return state;
 }
 
+/*
+check buffer for checking the received message
+*/
 bool check_buffer(std::string &buffer) {
     if (buffer.size() < 2) return false;
 
@@ -35,15 +133,23 @@ bool check_buffer(std::string &buffer) {
 std::queue<std::vector<float>> command_arr;
 std::vector<float> current_joints;
 
+/*
+Sets the interpolated commands into the command_arr queue
+Start Position is current joint positions
+End Position is absolute command
+*/
 void generate_motion(std::queue<std::vector<float>> &command_arr, std::vector<float> command) {
 
     // calculate length of command array given frequency and speed
     float speed = command.back();
     command.pop_back();
-    // for (int i = 0; i < command.size(); i++) {
-    //     command[i] += current_joints[i];
-    // }
-    float max_angle = *std::max_element(command.begin(), command.end(), [](float a, float b) {return std::abs(a) < std::abs(b);});
+
+    std::vector<float> current_joints_copy = current_joints;
+    std::vector<float> motion_end;
+    for (int i = 0; i < command.size(); i++) {
+        motion_end.push_back(command[i] + current_joints_copy[i]);
+    }
+    float max_angle = *std::max_element(motion_end.begin(), motion_end.end(), [](float a, float b) {return std::abs(a) < std::abs(b);});
     max_angle = std::abs(max_angle);
 
     float t_end = max_angle / speed;
@@ -53,7 +159,7 @@ void generate_motion(std::queue<std::vector<float>> &command_arr, std::vector<fl
     for (int i = 0; i < commandlen; i++) {
         std::vector<float> c(command.size());
         for (int j = 0; j < c.size(); j++) {
-            c[j] = command[j] / (commandlen - 1) * i;
+            c[j] = current_joints_copy[j] + (command[j] - current_joints_copy[j]) / (commandlen - 1) * i;
             
         }
         command_arr.push(c);
@@ -63,6 +169,9 @@ void generate_motion(std::queue<std::vector<float>> &command_arr, std::vector<fl
 
 }
 
+/*
+Thread for setting commands
+*/
 void user_input_thread() {
 
     while (true) {
@@ -100,10 +209,13 @@ void user_input_thread() {
     }
 }
 
+/*
+Generates a command readable for the robot
+*/
 std::vector<int8_t> generate_command(std::vector<float> command, bool last_command) {
     std::vector<int8_t> buffer;
     const uint8_t end_of_command[] = { 0xAA, 0x55 };
-    int32_t last_value = last_command ? -1 : 5;
+    int32_t last_value = last_command ? -1 : 10;
     int8_t last_value_bytes [sizeof(int32_t)];
     std::memcpy(last_value_bytes, &last_value, sizeof(int32_t));
 
@@ -130,7 +242,13 @@ std::vector<int8_t> generate_command(std::vector<float> command, bool last_comma
     return buffer;
 }
 
+/*
+Main communication Thread
+*/
 int main_thread() {
+
+    set_CPU(0);
+
     TCPServer *socketServer = new TCPServer(LOCAL_HOST, LOCAL_PORT);
 
     socketServer->start_();
@@ -143,11 +261,16 @@ int main_thread() {
 
     RobotState current_state;
 
-    bool commanded = false;
+    std::vector<float> command;
+
+    float period = 1 / FREQ * 1.0e6;
+
+    set_realtime_priority(99);
 
     auto start = std::chrono::high_resolution_clock::now();
 
     while (true) {
+
         ssize_t received_bytes = socketServer->recv_(in_buffer);
         if (received_bytes > 0) {
             received_main_buffer += in_buffer;
@@ -161,67 +284,32 @@ int main_thread() {
             received_main_buffer = "";
 
             if (command_arr.size() > 1) {
-                // commanded = true;
-                std::vector<float> command = command_arr.front();
+                command = command_arr.front();
                 command_arr.pop();
                 out_buffer = generate_command(command, false);
-
-                std::cout << "state:" << std::endl;
-                for (float c : current_joints) {
-                    std::cout << std::fixed << std::setprecision(3) << c << ", ";
-                }
-                std::cout << std::endl;
-                
-                std::cout << "command:" << std::endl;
-                for (float c : command) {
-                    std::cout << std::fixed << std::setprecision(3) << c << ", ";
-                }
-                std::cout << std::endl;
-                
                 ssize_t sent_bytes = socketServer->send_(out_buffer);
             }
             else if (command_arr.size() == 1) {
-                commanded = true;
-                std::vector<float> command = command_arr.front();
-                command_arr.pop();
-                out_buffer = generate_command(command, true);
-                // int res;
-                // std::memcpy(&res, &out_buffer[out_buffer.size() - 6], sizeof(int32_t));
-                // std::cout << res << std::endl;
+                command = command_arr.front();
+                out_buffer = generate_command(command, false);
                 ssize_t sent_bytes = socketServer->send_(out_buffer);
             }
             else {
-                // if (commanded) {
-                //     std::cout << "state:" << std::endl;
-                //     for (float c : current_joints) {
-                //         std::cout << c << ", ";
-                //     }
-                //     std::cout << std::endl;
-                // }
-                out_buffer = generate_command(current_joints, true);
+                out_buffer = generate_command(current_joints, false);
                 ssize_t sent_bytes = socketServer->send_(out_buffer);
-                // if (command_arr.size() == 1) {
-                //     std::vector<float> command = command_arr.front();
-                //     out_buffer = generate_command(command, true);
-                //     ssize_t sent_bytes = socketServer->send_(out_buffer);
-                // }
-                // else {
-                //     out_buffer = generate_command(current_joints, true);
-                //     ssize_t sent_bytes = socketServer->send_(out_buffer);
-                // }
-                
             }
-            // if (command_arr.size() > 0) std::cout << command_arr.size() << std::endl;
 
             auto end = std::chrono::high_resolution_clock::now();
-            int loop_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            // std::cout << std::fixed << std::setprecision(3) << loop_time / 1000.0 << std::endl;
+            auto t = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            std::this_thread::sleep_for(std::chrono::microseconds((int)period - t));
             start = std::chrono::high_resolution_clock::now();
-            std::this_thread::sleep_for(std::chrono::microseconds(1 / FREQ - loop_time));
         }
     }
 }
 
+/*
+Main Function
+*/
 int main() {
     std::thread main_t(main_thread);
     std::thread user_input_t(user_input_thread);
