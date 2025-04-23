@@ -310,6 +310,7 @@ int main_thread() {
 
             start = std::chrono::high_resolution_clock::now();
             if (dt > 1.0 / FREQ * 1.0e6) {
+                std::cerr << "late packet" << std::endl;
                 int idx = dt * FREQ / 1.0e6  - 1;
                 for (int k = 0; k < idx; k++) {
                     if (command_arr.size() > 1) {
