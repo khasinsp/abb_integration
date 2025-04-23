@@ -73,7 +73,14 @@
         "typeindex": "cpp",
         "typeinfo": "cpp",
         "valarray": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "*.ipp": "cpp",
+        "hash_map": "cpp",
+        "hash_set": "cpp",
+        "strstream": "cpp",
+        "netfwd": "cpp",
+        "rope": "cpp",
+        "slist": "cpp"
     },
     "ros.distro": "noetic",
     "python.autoComplete.extraPaths": [
