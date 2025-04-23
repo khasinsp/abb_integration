@@ -268,7 +268,7 @@ int main_thread() {
     set_realtime_priority(99);
 
     auto start = std::chrono::high_resolution_clock::now();
-
+    short i = 0;
     while (true) {
 
         ssize_t received_bytes = socketServer->recv_(in_buffer);
@@ -282,20 +282,18 @@ int main_thread() {
             current_state = unpack(received_main_buffer);
             current_joints.assign(current_state.values, current_state.values + numJoints);
             received_main_buffer = "";
-
-            if (command_arr.size() > 1) {
-                command = command_arr.front();
-                command_arr.pop();
-                out_buffer = generate_command(command, false);
-                ssize_t sent_bytes = socketServer->send_(out_buffer);
+            if (i == 0) {
+                command = current_joints;
+                i = 1;
             }
-            else if (command_arr.size() == 1) {
+
+            if (command_arr.size() > 0) {
                 command = command_arr.front();
                 out_buffer = generate_command(command, false);
                 ssize_t sent_bytes = socketServer->send_(out_buffer);
             }
             else {
-                out_buffer = generate_command(current_joints, false);
+                out_buffer = generate_command(command, false);
                 ssize_t sent_bytes = socketServer->send_(out_buffer);
             }
 
