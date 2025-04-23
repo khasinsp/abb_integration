@@ -173,6 +173,9 @@ void generate_motion(std::queue<std::vector<float>> &command_arr, std::vector<fl
 Thread for setting commands
 */
 void user_input_thread() {
+    // std::this_thread::sleep_for(std::chrono::seconds(5));
+    // std::vector<float> command = {0, 0, 0, 0, 0, 0, 90};
+    // generate_motion(command_arr, command);
 
     while (true) {
         float user_input;
@@ -289,6 +292,7 @@ int main_thread() {
 
             if (command_arr.size() > 0) {
                 command = command_arr.front();
+                if (command_arr.size() > 1) command_arr.pop();
                 out_buffer = generate_command(command, false);
                 ssize_t sent_bytes = socketServer->send_(out_buffer);
             }
@@ -298,9 +302,33 @@ int main_thread() {
             }
 
             auto end = std::chrono::high_resolution_clock::now();
-            auto t = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            std::this_thread::sleep_for(std::chrono::microseconds((int)period - t));
+            auto dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            std::this_thread::sleep_for(std::chrono::microseconds((int)period - dt));
+            // end = std::chrono::high_resolution_clock::now();
+            // auto loop_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+            // std::cout << loop_time / 1000.0 << std::endl;
+
             start = std::chrono::high_resolution_clock::now();
+            if (dt > 1.0 / FREQ * 1.0e6) {
+                int idx = dt * FREQ / 1.0e6  - 1;
+                for (int k = 0; k < idx; k++) {
+                    if (command_arr.size() > 1) {
+                        command_arr.pop();
+                        std::vector<float> new_command(numJoints);
+                        float t = 1 / FREQ - dt;
+                        std::queue<std::vector<float>> command_arr_backup = command_arr;
+                        std::vector<float> first_command = command_arr_backup.front();
+                        command_arr_backup.pop();
+                        std::vector<float> second_command = command_arr_backup.front();
+                        for (int k = 0; k < numJoints; k++) {
+                            if (command_arr.size() >= 2) {
+                                new_command[k] = (first_command[k] * t + second_command[k] * (1.0 / FREQ - t)) * FREQ;
+                            }
+                        }
+                        command_arr.front() = new_command;
+                    }
+                }
+            }
         }
     }
 }
