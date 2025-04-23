@@ -11,7 +11,7 @@
 #define ANGLE_THRESHOLD 360 //Threshold the command angles
 #define SPEED_THRESHOLD 360 //Threshold the speed
 
-#define FREQ 20 
+#define FREQ 20.0
 
 /*
 Set FIFO Policy with priority for the current Thread
@@ -145,11 +145,11 @@ void generate_motion(std::queue<std::vector<float>> &command_arr, std::vector<fl
     command.pop_back();
 
     std::vector<float> current_joints_copy = current_joints;
-    std::vector<float> motion_end;
+    std::vector<float> max_vec;
     for (int i = 0; i < command.size(); i++) {
-        motion_end.push_back(command[i] + current_joints_copy[i]);
+        max_vec.push_back(command[i] - current_joints_copy[i]);
     }
-    float max_angle = *std::max_element(motion_end.begin(), motion_end.end(), [](float a, float b) {return std::abs(a) < std::abs(b);});
+    float max_angle = *std::max_element(max_vec.begin(), max_vec.end(), [](float a, float b) {return std::abs(a) < std::abs(b);});
     max_angle = std::abs(max_angle);
 
     float t_end = max_angle / speed;
