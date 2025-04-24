@@ -13,6 +13,8 @@
 
 #define FREQ 20.0
 
+#define ZONE 1
+
 /*
 Set FIFO Policy with priority for the current Thread
 */
@@ -218,7 +220,7 @@ Generates a command readable for the robot
 std::vector<int8_t> generate_command(std::vector<float> command, bool last_command) {
     std::vector<int8_t> buffer;
     const uint8_t end_of_command[] = { 0xAA, 0x55 };
-    int32_t last_value = last_command ? -1 : 1;
+    int32_t last_value = last_command ? -1 : ZONE;
     int8_t last_value_bytes [sizeof(int32_t)];
     std::memcpy(last_value_bytes, &last_value, sizeof(int32_t));
 
@@ -272,6 +274,7 @@ void csv_thread(std::ofstream* csv_ptr, std::queue<std::pair<std::vector<float>,
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
     std::cout << "successfully wrote csv file" << std::endl;
+    exit(EXIT_SUCCESS);
 }
 
 /*
