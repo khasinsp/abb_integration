@@ -218,7 +218,7 @@ Generates a command readable for the robot
 std::vector<int8_t> generate_command(std::vector<float> command, bool last_command) {
     std::vector<int8_t> buffer;
     const uint8_t end_of_command[] = { 0xAA, 0x55 };
-    int32_t last_value = last_command ? -1 : 10;
+    int32_t last_value = last_command ? -1 : 1;
     int8_t last_value_bytes [sizeof(int32_t)];
     std::memcpy(last_value_bytes, &last_value, sizeof(int32_t));
 
@@ -245,10 +245,39 @@ std::vector<int8_t> generate_command(std::vector<float> command, bool last_comma
     return buffer;
 }
 
+std::queue<std::pair<std::vector<float>, unsigned long>> act;
+std::queue<std::pair<std::vector<float>, unsigned long>> com;
+
+void write_to_queue(std::queue<std::pair<std::vector<float>, unsigned long>> &vec, std::pair<std::vector<float>, unsigned long> pai) {
+    vec.push(pai);
+}
+
+void csv_thread(std::ofstream* csv_ptr, std::queue<std::pair<std::vector<float>, unsigned long>> *queue_ptr) {
+    std::this_thread::sleep_for(std::chrono::seconds(15));
+    set_CPU(1);
+    set_realtime_priority(99);
+    while ((*queue_ptr).size() != 0) {
+        auto data = (*queue_ptr).front();
+        (*queue_ptr).pop();
+        auto vec = data.first;
+        auto ts = data.second;
+        (*csv_ptr) << ts << ",";
+        for (int i = 0; i < vec.size(); i++) {
+            (*csv_ptr) << vec[i];
+            if (i < vec.size() - 1) (*csv_ptr) << ",";
+        }
+        (*csv_ptr) << "\n";
+        (*csv_ptr).flush();
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    std::cout << "successfully wrote csv file" << std::endl;
+}
+
 /*
 Main communication Thread
 */
-int main_thread() {
+void main_thread() {
 
     set_CPU(0);
 
@@ -266,11 +295,15 @@ int main_thread() {
 
     std::vector<float> command;
 
+    std::pair<std::vector<float>, unsigned long> pos_act;
+    std::pair<std::vector<float>, unsigned long> pos_com;
+
     float period = 1 / FREQ * 1.0e6;
 
     set_realtime_priority(99);
 
     auto start = std::chrono::high_resolution_clock::now();
+    auto start_main = std::chrono::high_resolution_clock::now();
     short i = 0;
     while (true) {
 
@@ -280,11 +313,18 @@ int main_thread() {
         }
 
         if (check_buffer(received_main_buffer)) {
+            // store timestamp (timestamp of actual position) for precision measurement
+            auto ts_act = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+
             received_main_buffer.pop_back();
             received_main_buffer.pop_back();
             current_state = unpack(received_main_buffer);
             current_joints.assign(current_state.values, current_state.values + numJoints);
             received_main_buffer = "";
+
+            pos_act.first = current_joints;
+            pos_act.second = ts_act;
+
             if (i == 0) {
                 command = current_joints;
                 i = 1;
@@ -301,8 +341,17 @@ int main_thread() {
                 ssize_t sent_bytes = socketServer->send_(out_buffer);
             }
 
+            pos_com.first = command;
+            pos_com.second = ts_act + 50;
+
+            write_to_queue(act, pos_act);
+            write_to_queue(com, pos_com);
+
             auto end = std::chrono::high_resolution_clock::now();
             auto dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+            if (std::chrono::duration_cast<std::chrono::seconds>(end - start_main).count() > 15) break;
+            
             std::this_thread::sleep_for(std::chrono::microseconds((int)period - dt));
             // end = std::chrono::high_resolution_clock::now();
             // auto loop_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -332,17 +381,37 @@ int main_thread() {
             }
         }
     }
+    std::cout << "main done" << std::endl;
+    return;
 }
 
 /*
 Main Function
 */
 int main() {
+    std::ofstream act_csv("/home/urc/abb_integration/motion_precision/24_04_2/act.csv");
+    if (!act_csv.is_open()) {
+        std::cerr << "Act CSV could not be opened" << std::endl;
+    }
+    act_csv << "timestamp," << "j1," << "j2," << "j3," << "j4," << "j5," << "j6\n";
+    act_csv.flush();
+
+    std::ofstream com_csv("/home/urc/abb_integration/motion_precision/24_04_2/com.csv");
+    if (!com_csv.is_open()) {
+        std::cerr << "Com CSV could not be opened" << std::endl;
+    }
+    com_csv << "timestamp," << "j1," << "j2," << "j3," << "j4," << "j5," << "j6\n";
+    com_csv.flush();
+
     std::thread main_t(main_thread);
     std::thread user_input_t(user_input_thread);
+    std::thread act_csv_t(csv_thread, &act_csv, &act);
+    std::thread com_csv_t(csv_thread, &com_csv, &com);
 
     main_t.join();
     user_input_t.join();
+    act_csv_t.join();
+    com_csv_t.join();
 
     return 0;
 }
