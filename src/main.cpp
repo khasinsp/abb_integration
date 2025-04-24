@@ -374,7 +374,7 @@ void main_thread() {
                             if (command_arr.size() >= 2) {
                                 new_command[k] = (first_command[k] * t + second_command[k] * (1.0 / FREQ - t)) * FREQ;
                             }
-                        }
+                        } 
                         command_arr.front() = new_command;
                     }
                 }
