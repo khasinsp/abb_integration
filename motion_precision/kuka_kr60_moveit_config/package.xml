@@ -1,0 +1,22 @@
+<package>
+
+  <name>kuka_kr60_moveit_config</name>
+  <version>0.2.0</version>
+  <description>
+     Moveit config for the Kuka robots.
+  </description>
+  <author email="assistant@moveit.ros.org">MoveIt Setup Assistant</author>
+  <maintainer email="assistant@moveit.ros.org">MoveIt Setup Assistant</maintainer>
+
+  <license>BSD</license>
+
+  <run_depend>moveit_ros_move_group</run_depend>
+  <run_depend>moveit_planners_ompl</run_depend>
+  <run_depend>moveit_ros_visualization</run_depend>
+  <run_depend>joint_state_publisher</run_depend>
+  <run_depend>robot_state_publisher</run_depend>
+  <run_depend>xacro</run_depend>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  
+</package>
