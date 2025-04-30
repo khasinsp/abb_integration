@@ -1,0 +1,7 @@
+# set padding in [m]
+default_robot_padding: 0.05
+# default_robot_link_padding: {link_7: 1.0, link_6: 1.0, link_5: 1.0}
+# default_robot_scale:
+# default_object_padding:
+# default_attached_padding:
+# default_robot_link_scale: {}

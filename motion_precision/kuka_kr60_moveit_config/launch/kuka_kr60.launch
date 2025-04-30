@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<launch>
+
+  <arg name="sim" default="true" />
+  <arg name="gui" default="true" />
+
+  <node name="kuka_planning_scene" pkg="ros_urc" type="kuka_planning_scene.py"/>
+  <node name="kinematic_path_service" pkg="ros_urc" type="kinematic_planning_service.py" args="arm_and_track"/>
+
+  <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
+
+  <node name="trottled_joint_state" pkg="topic_tools" type="throttle" args="messages /joint_states 1.0" />
+
+  <arg name="controller_list_filename" value="controller_list.yaml" unless="false" />
+
+  <!-- KUKA RSI Controller, TODO extract this in here -->
+  <include file="$(find kuka_rsi_hw_interface)/launch/kuka_kr60_rsi_interface.launch" >
+    <arg name="sim" value="$(arg sim)" />
+  </include>
+
+  <!-- The name of the parameter under which the URDF is loaded -->
+  <arg name="robot_description" default="robot_description"/>
+  <!-- set padding parameter for roboter in move_group -->
+  <rosparam ns="/move_group/$(arg robot_description)_planning/" command="load" file="$(find kuka_kr60_moveit_config)/config/padding.yaml" />
+
+  <node pkg="tf" type="static_transform_publisher" name="debug" args="0 0 0 0 0 0 base base_link 10"/>
+
+  <!-- set path to moveit configuration package -->
+  <arg name="moveit_config_pkg_path" value="$(find kuka_kr60_moveit_config)" />
+
+  <!-- Load universal robot description format (URDF) -->
+  <arg name="load_robot_description" value="true"/>
+  <param if="$(arg load_robot_description)" name="$(arg robot_description)" textfile="$(find kuka_kr60_moveit_config)/urdf/kr60.urdf"/>
+
+  <!-- The semantic description that corresponds to the URDF -->
+  <param name="$(arg robot_description)_semantic" textfile="$(find kuka_kr60_moveit_config)/srdf/kr60.srdf" />
+
+  <!-- Load updated joint limits (override information from URDF) -->
+  <group ns="$(arg robot_description)_planning">
+    <rosparam command="load" file="$(find kuka_kr60_moveit_config)/config/joint_limits_kr60.yaml"/>
+  </group>
+
+  <!-- Load default settings for kinematics; these settings are overridden by settings in a node's namespace -->
+  <group ns="$(arg robot_description)_kinematics">
+    <rosparam command="load" file="$(find kuka_kr60_moveit_config)/config/kinematics.yaml"/>
+  </group>
+
+  <!-- Publish coordinates transforms for base frames -->
+  <node pkg="tf" type="static_transform_publisher" name="world_frame_publisher" args="0 0 0 0 0 0 map odom 100" />
+  <node pkg="tf" type="static_transform_publisher" name="odom_frame_publisher" args="0 0 0 0 0 0 odom odom_combined 100" />
+  <node pkg="tf" type="static_transform_publisher" name="virtual_joint_broadcaster_0" args="0 0 0 0 0 0 odom_combined base 100" />
+
+  <!-- RViz? -->
+  <!--
+  <include file="$(arg moveit_config_pkg_path)/launch/moveit_rviz.launch" if="$(arg gui)">
+    <arg name="config" value="true"/>
+  </include>
+  -->
+
+  <!-- Move Group -->
+  <param name="/move_group/arm/solve_type" value="Distance" />
+
+    <!-- GDB Debug Option -->
+  <arg name="debug" default="false" />
+  <arg unless="$(arg debug)" name="launch_prefix" value="" />
+  <arg     if="$(arg debug)" name="launch_prefix"
+	   value="gdb -x $(find kuka_kr60_moveit_config)/launch/gdb_settings.gdb --ex run --args" />
+
+  <!-- Verbose Mode Option -->
+  <arg name="info" default="$(arg debug)" />
+  <arg unless="$(arg info)" name="command_args" value="" />
+  <arg     if="$(arg info)" name="command_args" value="--debug" />
+
+  <!-- move_group settings -->
+  <arg name="allow_trajectory_execution" default="true"/>
+  <arg name="fake_execution" default="false"/>
+  <arg name="max_safe_path_cost" default="1"/>
+  <arg name="jiggle_fraction" default="0.05" />
+  <arg name="publish_monitored_planning_scene" default="true"/>
+
+  <!-- Planning Functionality -->
+  <include ns="move_group" file="$(find kuka_kr60_moveit_config)/launch/ompl_planning_pipeline.launch.xml"/>
+
+  <!-- Start the actual move_group node/action server -->
+  <node name="move_group" launch-prefix="$(arg launch_prefix)" pkg="moveit_ros_move_group" type="move_group" respawn="false" output="screen" args="$(arg command_args)" required="true">
+    <!-- Set the display variable, in case OpenGL code is used internally -->
+    <env name="DISPLAY" value="$(optenv DISPLAY :0)" />
+
+    <param name="allow_trajectory_execution" value="$(arg allow_trajectory_execution)"/>
+    <param name="max_safe_path_cost" value="$(arg max_safe_path_cost)"/>
+    <param name="jiggle_fraction" value="$(arg jiggle_fraction)" />
+
+    <!-- MoveGroup capabilities to load -->
+    <param name="capabilities" value="move_group/MoveGroupCartesianPathService
+				      move_group/MoveGroupKinematicsService
+				      move_group/MoveGroupMoveAction
+				      move_group/MoveGroupPickPlaceAction
+				      move_group/MoveGroupPlanService
+				      move_group/MoveGroupQueryPlannersService
+				      move_group/MoveGroupStateValidationService
+				      move_group/MoveGroupGetPlanningSceneService
+				      move_group/ApplyPlanningSceneService
+				      move_group/ClearOctomapService
+				      " />
+
+    <!-- Publish the planning scene of the physical robot so that rviz plugin can know actual robot -->
+    <param name="planning_scene_monitor/publish_planning_scene" value="$(arg publish_monitored_planning_scene)" />
+    <param name="planning_scene_monitor/publish_geometry_updates" value="$(arg publish_monitored_planning_scene)" />
+    <param name="planning_scene_monitor/publish_state_updates" value="$(arg publish_monitored_planning_scene)" />
+    <param name="planning_scene_monitor/publish_transforms_updates" value="$(arg publish_monitored_planning_scene)" />
+  </node>
+
+</launch>
