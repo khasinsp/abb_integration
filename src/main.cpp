@@ -9,11 +9,11 @@
 #define numJoints 6 //Robot has 6 joints
 
 #define ANGLE_THRESHOLD 360 //Threshold the command angles
-#define SPEED_THRESHOLD 360 //Threshold the speed
+#define SPEED_THRESHOLD 1000 //Threshold the speed
 
-#define FREQ 20.0
+#define FREQ 80.0
 
-#define ZONE 1
+#define ZONE 1000
 
 /*
 Set FIFO Policy with priority for the current Thread
@@ -146,7 +146,14 @@ void generate_motion(std::queue<std::vector<float>> &command_arr, std::vector<fl
     float speed = command.back();
     command.pop_back();
 
-    std::vector<float> current_joints_copy = current_joints;
+    std::vector<float> current_joints_copy;
+
+    if (command_arr.size() > 0) {
+        current_joints_copy = command_arr.front();
+    }
+    else  {
+        current_joints_copy = current_joints;
+    }
     std::vector<float> max_vec;
     for (int i = 0; i < command.size(); i++) {
         max_vec.push_back(command[i] - current_joints_copy[i]);
@@ -179,22 +186,19 @@ void user_input_thread() {
     // std::vector<float> command = {0, 0, 0, 0, 0, 0, 90};
     // generate_motion(command_arr, command);
 
-    while (true) {
-        float user_input;
-        std::vector<float> command;
-        std::cout << "Type:\nangle0 angle1 angle2 angle3 angle4 angle5 angle6 speed[deg/s]" << std::endl;
-        for (int i = 0; i < 7; i++) {
-            std::cin >> user_input;
-            command.push_back(user_input);
-        }
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
-        bool high_angle = false;
-        bool high_speed = false;
-        for (int i = 0; i < command.size(); i++) {
-            if (i < command.size() - 1) {
-                if (command[i] > ANGLE_THRESHOLD) {
-                    std::cout << "high angle: joint " << i+1 << std::endl;
-                    high_angle = true;
+    int i = 0;
+    float move = 10.0;
+    float v = 50.0;
+
+    float move_time = 2.0 * move / v;
+
+    std::vector<float> command(7);
+
+    while (true) {
+        if (i % 2 == 0) {
+            command = {move, move, move, move, move, move, v};
                 }
             }
             if (i == command.size() - 1) {
