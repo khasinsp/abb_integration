@@ -200,22 +200,53 @@ void user_input_thread() {
         if (i % 2 == 0) {
             command = {move, move, move, move, move, move, v};
                 }
-            }
-            if (i == command.size() - 1) {
-                if (command[i] > SPEED_THRESHOLD) {
-                    std::cout << "high speed: " << command[i] << std::endl;
-                    high_speed = true;
+        else {
+            command = {-move, -move, -move, -move, -move, -move, v};
                 }
-            }
-        }
-
-        if (high_angle || high_speed) {
-            std::cout << "Invalid value, try again!" << std::endl;
-            continue;
-        }
-
+        
+        std::cout << "motion generator" << std::endl;
         generate_motion(command_arr, command);
+        std::cout << "exit motion generator" << std::endl;
+
+        i++;
+
+        std::this_thread::sleep_for(std::chrono::seconds((int)(move_time * 3)));
+
     }
+
+    // while (true) {
+    //     float user_input;
+    //     std::vector<float> command;
+    //     std::cout << "Type:\nangle0 angle1 angle2 angle3 angle4 angle5 angle6 speed[deg/s]" << std::endl;
+    //     for (int i = 0; i < 7; i++) {
+    //         std::cin >> user_input;
+    //         command.push_back(user_input);
+    //     }
+
+    //     bool high_angle = false;
+    //     bool high_speed = false;
+    //     for (int i = 0; i < command.size(); i++) {
+    //         if (i < command.size() - 1) {
+    //             if (command[i] > ANGLE_THRESHOLD) {
+    //                 std::cout << "high angle: joint " << i+1 << std::endl;
+    //                 high_angle = true;
+    //             }
+    //         }
+    //         if (i == command.size() - 1) {
+    //             if (command[i] > SPEED_THRESHOLD) {
+    //                 std::cout << "high speed: " << command[i] << std::endl;
+    //                 high_speed = true;
+    //             }
+    //         }
+    //     }
+
+    //     if (high_angle || high_speed) {
+    //         std::cout << "Invalid value, try again!" << std::endl;
+    //         continue;
+    //     }
+
+    //     generate_motion(command_arr, command);
+    // }
 }
 
 /*
