@@ -312,6 +312,17 @@ void csv_thread(std::ofstream* csv_ptr, std::queue<std::pair<std::vector<float>,
     exit(EXIT_SUCCESS);
 }
 
+void user_input(float move, float v) {
+
+    float move_time = 2.0 * move / v;
+
+    std::vector<float> command(7);
+
+    command = {move, move, move, move, move, move, v};
+    generate_motion(command_arr, command);
+
+}
+
 /*
 Main communication Thread
 */
