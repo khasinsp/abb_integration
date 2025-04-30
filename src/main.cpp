@@ -199,10 +199,10 @@ void user_input_thread() {
     while (true) {
         if (i % 2 == 0) {
             command = {move, move, move, move, move, move, v};
-                }
+        }
         else {
             command = {-move, -move, -move, -move, -move, -move, v};
-                }
+        }
         
         std::cout << "motion generator" << std::endl;
         generate_motion(command_arr, command);
@@ -354,6 +354,8 @@ void main_thread() {
     auto start = std::chrono::high_resolution_clock::now();
     auto start_main = std::chrono::high_resolution_clock::now();
     short i = 0;
+    unsigned long counter = 0;
+    float move;
     while (true) {
 
         ssize_t received_bytes = socketServer->recv_(in_buffer);
@@ -363,6 +365,7 @@ void main_thread() {
 
         if (check_buffer(received_main_buffer)) {
             // store timestamp (timestamp of actual position) for precision measurement
+            auto dt1 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count();
             auto ts_act = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 
             received_main_buffer.pop_back();
@@ -391,7 +394,7 @@ void main_thread() {
             }
 
             pos_com.first = command;
-            pos_com.second = ts_act + 50;
+            pos_com.second = ts_act + 1.0 / FREQ * 1.0e3;
 
             write_to_queue(act, pos_act);
             write_to_queue(com, pos_com);
@@ -399,36 +402,23 @@ void main_thread() {
             auto end = std::chrono::high_resolution_clock::now();
             auto dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
-            if (std::chrono::duration_cast<std::chrono::seconds>(end - start_main).count() > 15) break;
-            
-            std::this_thread::sleep_for(std::chrono::microseconds((int)period - dt));
-            // end = std::chrono::high_resolution_clock::now();
-            // auto loop_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-            // std::cout << loop_time / 1000.0 << std::endl;
+            if (std::chrono::duration_cast<std::chrono::seconds>(end - start_main).count() > 10) break;
 
             start = std::chrono::high_resolution_clock::now();
-            if (dt > 1.0 / FREQ * 1.0e6) {
-                std::cerr << "late packet" << std::endl;
-                int idx = dt * FREQ / 1.0e6  - 1;
-                for (int k = 0; k < idx; k++) {
-                    if (command_arr.size() > 1) {
-                        command_arr.pop();
-                        std::vector<float> new_command(numJoints);
-                        float t = 1 / FREQ - dt;
-                        std::queue<std::vector<float>> command_arr_backup = command_arr;
-                        std::vector<float> first_command = command_arr_backup.front();
-                        command_arr_backup.pop();
-                        std::vector<float> second_command = command_arr_backup.front();
-                        for (int k = 0; k < numJoints; k++) {
-                            if (command_arr.size() >= 2) {
-                                new_command[k] = (first_command[k] * t + second_command[k] * (1.0 / FREQ - t)) * FREQ;
-                            }
-                        } 
-                        command_arr.front() = new_command;
-                    }
+
+            if (command_arr.size() <= 1) {
+                if (counter % 2 == 0) {
+                    move = 10.0;
                 }
+                else {
+                    move = -10.0;
+                }
+                user_input(move, 10);
+                counter++;
             }
+
         }
+
     }
     std::cout << "main done" << std::endl;
     return;
@@ -438,14 +428,14 @@ void main_thread() {
 Main Function
 */
 int main() {
-    std::ofstream act_csv("/home/urc/abb_integration/motion_precision/24_04_2/act.csv");
+    std::ofstream act_csv("/home/urc/abb_integration/motion_precision/check_interpolation/30_04_speed10_Freq80/act.csv");
     if (!act_csv.is_open()) {
         std::cerr << "Act CSV could not be opened" << std::endl;
     }
     act_csv << "timestamp," << "j1," << "j2," << "j3," << "j4," << "j5," << "j6\n";
     act_csv.flush();
 
-    std::ofstream com_csv("/home/urc/abb_integration/motion_precision/24_04_2/com.csv");
+    std::ofstream com_csv("/home/urc/abb_integration/motion_precision/check_interpolation/30_04_speed10_Freq80/com.csv");
     if (!com_csv.is_open()) {
         std::cerr << "Com CSV could not be opened" << std::endl;
     }
@@ -453,12 +443,12 @@ int main() {
     com_csv.flush();
 
     std::thread main_t(main_thread);
-    std::thread user_input_t(user_input_thread);
+    // std::thread user_input_t(user_input_thread);
     std::thread act_csv_t(csv_thread, &act_csv, &act);
     std::thread com_csv_t(csv_thread, &com_csv, &com);
 
     main_t.join();
-    user_input_t.join();
+    // user_input_t.join();
     act_csv_t.join();
     com_csv_t.join();
 
