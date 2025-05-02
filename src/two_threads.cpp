@@ -171,7 +171,7 @@ void generate_motion(std::queue<std::vector<float>> &command_arr, std::vector<fl
     max_angle = std::abs(max_angle);
 
     float t_end = max_angle / speed;
-    std::cout << "Max Angle is: " << max_angle << std::endl;
+    // std::cout << "Max Angle is: " << max_angle << std::endl;
     int commandlen = max_angle / speed * FREQ;
 
     for (int i = 0; i < commandlen; i++) {
@@ -325,7 +325,7 @@ void send_thread() {
 
     float move;
 
-    float speed = 50;
+    float speed = 10;
 
     bool first_state_received = false;
 
@@ -351,11 +351,6 @@ void send_thread() {
                 if (command_arr.size() > 1) command_arr.pop();
             }
         }
-
-        // for (auto c : received_main_buffer) {
-        //     std::cout << "0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(c) << ' ';
-        // }
-        // std::cout << std::endl;
 
         if (check_received_message(received_main_buffer)) {
             received_main_buffer = "";
@@ -391,14 +386,14 @@ void send_thread() {
 Main Function
 */
 int main() {
-    std::ofstream act_csv("/home/urc/abb_integration/motion_precision/two_threads/02_05_1/act.csv");
+    std::ofstream act_csv("/home/urc/abb_integration/motion_precision/two_threads/02_05_2/act.csv");
     if (!act_csv.is_open()) {
         std::cerr << "Act CSV could not be opened" << std::endl;
     }
     act_csv << "timestamp," << "j1," << "j2," << "j3," << "j4," << "j5," << "j6\n";
     act_csv.flush();
 
-    std::ofstream com_csv("/home/urc/abb_integration/motion_precision/two_threads/02_05_1/com.csv");
+    std::ofstream com_csv("/home/urc/abb_integration/motion_precision/two_threads/02_05_2/com.csv");
     if (!com_csv.is_open()) {
         std::cerr << "Com CSV could not be opened" << std::endl;
     }
