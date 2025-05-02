@@ -23,7 +23,7 @@ void set_realtime_priority(int priority) {
     struct sched_param param;
     param.sched_priority = priority;
 
-    if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &param) != 0) {
+    if (pthread_setschedparam(pthread_self(), SCHED_RR, &param) != 0) {
         perror("Unable to set realtime priority");
         exit(EXIT_FAILURE);
     }
@@ -300,11 +300,12 @@ void receive_thread() {
 
             write_to_queue(act_q, pos_act);
         }
+        sched_yield();
     }
 }
 
 void send_thread() {
-    set_CPU(1);
+    set_CPU(0);
     set_realtime_priority(99);
 
     TCPServer *socketServerTX = new TCPServer(LOCAL_HOST, TX_PORT);
@@ -325,7 +326,7 @@ void send_thread() {
 
     float move;
 
-    float speed = 10;
+    float speed = 50;
 
     bool first_state_received = false;
 
@@ -379,6 +380,8 @@ void send_thread() {
                 counter++;
             }
         }
+
+        sched_yield();
     }
 }
 
@@ -386,14 +389,14 @@ void send_thread() {
 Main Function
 */
 int main() {
-    std::ofstream act_csv("/home/urc/abb_integration/motion_precision/two_threads/02_05_2/act.csv");
+    std::ofstream act_csv("/home/urc/abb_integration/motion_precision/two_threads/02_05_4/act.csv");
     if (!act_csv.is_open()) {
         std::cerr << "Act CSV could not be opened" << std::endl;
     }
     act_csv << "timestamp," << "j1," << "j2," << "j3," << "j4," << "j5," << "j6\n";
     act_csv.flush();
 
-    std::ofstream com_csv("/home/urc/abb_integration/motion_precision/two_threads/02_05_2/com.csv");
+    std::ofstream com_csv("/home/urc/abb_integration/motion_precision/two_threads/02_05_4/com.csv");
     if (!com_csv.is_open()) {
         std::cerr << "Com CSV could not be opened" << std::endl;
     }
